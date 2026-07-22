@@ -95,6 +95,18 @@ export class JsonRpcGatewayClient {
   }
 
   async connect(wsUrl: string): Promise<void> {
+    // Fail loudly on a malformed URL instead of letting `new WebSocket()`
+    // coerce it. A non-string here means an upstream contract skew (e.g. an
+    // IPC result object passed through whole), which otherwise surfaces as an
+    // opaque dial to "ws://<page-origin>/[object%20Object]" — a real incident:
+    // a stale compiled copy of websocket-url.js shadowed the .ts source and
+    // returned the raw `{ ok, wsUrl }` IPC result after #68250 changed the
+    // getGatewayWsUrl contract.
+    if (typeof wsUrl !== 'string' || !/^wss?:\/\//i.test(wsUrl)) {
+      const got = typeof wsUrl === 'string' ? JSON.stringify(wsUrl) : `type "${typeof wsUrl}"`
+      throw new Error(`gateway connect() requires a ws:// or wss:// URL string, got ${got}`)
+    }
+
     if (this.socket?.readyState === WebSocket.OPEN || this.state === 'connecting') {
       return
     }
